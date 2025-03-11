@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -173,6 +173,7 @@ func ProcessDiagnoses(pathCsv string, db *pgxpool.Pool) error {
 		copyData[i] = []interface{}{diag.Key, diag.Diagnosis}
 	}
 
+	// Ejecutar inserción en lotes con CopyFrom
 	_, err = tx.CopyFrom(ctx, pgx.Identifier{"diagnoses"}, columns, pgx.CopyFromRows(copyData))
 	if err != nil {
 		return fmt.Errorf("error al insertar diagnósticos: %w", err)
