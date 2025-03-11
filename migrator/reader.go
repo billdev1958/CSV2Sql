@@ -72,14 +72,9 @@ func ReaderDiagnosis(pathCsv string) ([]Diagnoses, error) {
 		startIndex = 0
 	}
 
-	limit := 10000
-	if len(records) < limit {
-		limit = len(records)
-	}
+	diagnoses := make([]Diagnoses, 0, len(records)-startIndex)
 
-	diagnoses := make([]Diagnoses, 0, limit)
-
-	for i := startIndex; i < limit; i++ {
+	for i := startIndex; i < len(records); i++ {
 		record := records[i]
 
 		if len(record) < 2 {
@@ -91,7 +86,6 @@ func ReaderDiagnosis(pathCsv string) ([]Diagnoses, error) {
 			Key:       record[0],
 			Diagnosis: record[1],
 		})
-
 	}
 
 	return diagnoses, nil
