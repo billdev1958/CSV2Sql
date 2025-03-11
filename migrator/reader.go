@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/jackc/pgx"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -163,21 +164,21 @@ func ProcessDiagnoses(pathCsv string, db *pgxpool.Pool) error {
 	}
 	defer tx.Rollback(ctx)
 
-	query := `
-        INSERT INTO diagnoses (key, diagnosis)
-        VALUES ($1, $2)
-    `
+	// Definir columnas de la tabla
+	columns := []string{"key", "diagnosis"}
 
-	for _, diag := range diagnoses {
-		_, err := tx.Exec(ctx, query,
-			diag.Key,
-			diag.Diagnosis,
-		)
-		if err != nil {
-			return fmt.Errorf("error al insertar diagnóstico: %w", err)
-		}
+	// Preparar los datos en un formato compatible con pgx.CopyFrom
+	copyData := make([][]interface{}, len(diagnoses))
+	for i, diag := range diagnoses {
+		copyData[i] = []interface{}{diag.Key, diag.Diagnosis}
 	}
 
+	_, err = tx.CopyFrom(ctx, pgx.Identifier{"diagnoses"}, columns, pgx.CopyFromRows(copyData))
+	if err != nil {
+		return fmt.Errorf("error al insertar diagnósticos: %w", err)
+	}
+
+	// Confirmar la transacción
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("error al confirmar transacción: %w", err)
 	}
