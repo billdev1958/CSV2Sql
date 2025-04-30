@@ -16,7 +16,6 @@ func ReaderMedicine(pathCsv string) ([]Medicine, error) {
 	file, err := os.Open(pathCsv)
 	if err != nil {
 		return nil, fmt.Errorf("error al abrir el archivo .csv: %w", err)
-
 	}
 	defer file.Close()
 
@@ -25,19 +24,15 @@ func ReaderMedicine(pathCsv string) ([]Medicine, error) {
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("error al leer el csv: %w", err)
-
 	}
 
-	limit := 500
-	if len(records) < limit {
-		limit = len(records)
-	}
+	medicines := make([]Medicine, len(records))
 
-	medicines := make([]Medicine, limit)
-
-	for i := 0; i < limit; i++ {
-		record := records[i]
-
+	for i, record := range records {
+		if len(record) < 6 {
+			fmt.Printf("Registro incompleto en la línea %d: %v\n", i+1, record)
+			continue
+		}
 		medicines[i] = Medicine{
 			Substance:           record[0],
 			Presentation:        record[1],
@@ -47,6 +42,7 @@ func ReaderMedicine(pathCsv string) ([]Medicine, error) {
 			Frequency:           record[5],
 		}
 	}
+
 	return medicines, nil
 }
 
