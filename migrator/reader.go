@@ -11,6 +11,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+const batchSize = 500
+
+
 func ReaderMedicine(pathCsv string) ([]Medicine, error) {
 
 	file, err := os.Open(pathCsv)
@@ -26,22 +29,23 @@ func ReaderMedicine(pathCsv string) ([]Medicine, error) {
 		return nil, fmt.Errorf("error al leer el csv: %w", err)
 	}
 
-	medicines := make([]Medicine, len(records))
+	var medicines []Medicine
 
-	for i, record := range records {
-		if len(record) < 6 {
-			fmt.Printf("Registro incompleto en la línea %d: %v\n", i+1, record)
-			continue
-		}
-		medicines[i] = Medicine{
-			Substance:           record[0],
-			Presentation:        record[1],
-			RouteAdministration: record[2],
-			Dose:                record[3],
-			Quantity:            record[4],
-			Frequency:           record[5],
-		}
+for i, record := range records {
+	if len(record) < 6 {
+		fmt.Printf("Registro incompleto en la línea %d: %v\n", i+1, record)
+		continue
 	}
+	medicines = append(medicines, Medicine{
+		Substance:           record[0],
+		Presentation:        record[1],
+		RouteAdministration: record[2],
+		Dose:                record[3],
+		Quantity:            record[4],
+		Frequency:           record[5],
+	})
+}
+
 
 	return medicines, nil
 }
@@ -89,7 +93,7 @@ func ReaderDiagnosis(pathCsv string) ([]Diagnoses, error) {
 }
 
 func ConnectDB() (*pgxpool.Pool, error) {
-	dsn := "postgres://root:secret@localhost:5432/university_db?sslmode=disable"
+	dsn := "postgres://root:secret@localhost:5432/cms_db?sslmode=disable"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -125,17 +129,23 @@ func ProcessMedicines(pathCsv string, db *pgxpool.Pool) error {
         ) VALUES ($1, $2, $3, $4, $5, $6)
     `
 
-	for _, med := range medicines {
-		_, err := tx.Exec(ctx, query,
-			med.Substance,
-			med.Presentation,
-			med.RouteAdministration,
-			med.Dose,
-			med.Quantity,
-			med.Frequency,
-		)
-		if err != nil {
-			return fmt.Errorf("error al insertar medicina: %w", err)
+	for i := 0; i < len(medicines); i += batchSize {
+		end := i + batchSize
+		if end > len(medicines) {
+			end = len(medicines)
+		}
+		for _, med := range medicines[i:end] {
+			_, err := tx.Exec(ctx, query,
+				med.Substance,
+				med.Presentation,
+				med.RouteAdministration,
+				med.Dose,
+				med.Quantity,
+				med.Frequency,
+			)
+			if err != nil {
+				return fmt.Errorf("error al insertar medicina en lote %d-%d: %w", i, end, err)
+			}
 		}
 	}
 
@@ -143,9 +153,10 @@ func ProcessMedicines(pathCsv string, db *pgxpool.Pool) error {
 		return fmt.Errorf("error al confirmar transacción: %w", err)
 	}
 
-	fmt.Println("[OK] Medicinas insertadas correctamente.")
+	fmt.Println("[OK] Medicinas insertadas correctamente por lotes.")
 	return nil
 }
+
 
 func ProcessDiagnoses(pathCsv string, db *pgxpool.Pool) error {
 	diagnoses, err := ReaderDiagnosis(pathCsv)
@@ -160,26 +171,31 @@ func ProcessDiagnoses(pathCsv string, db *pgxpool.Pool) error {
 	}
 	defer tx.Rollback(ctx)
 
-	// Definir columnas de la tabla
 	columns := []string{"key", "diagnosis"}
 
-	// Preparar los datos en un formato compatible con pgx.CopyFrom
-	copyData := make([][]interface{}, len(diagnoses))
-	for i, diag := range diagnoses {
-		copyData[i] = []interface{}{diag.Key, diag.Diagnosis}
+	for i := 0; i < len(diagnoses); i += batchSize {
+		end := i + batchSize
+		if end > len(diagnoses) {
+			end = len(diagnoses)
+		}
+
+		batch := diagnoses[i:end]
+		copyData := make([][]interface{}, len(batch))
+		for j, diag := range batch {
+			copyData[j] = []interface{}{diag.Key, diag.Diagnosis}
+		}
+
+		_, err := tx.CopyFrom(ctx, pgx.Identifier{"diagnoses"}, columns, pgx.CopyFromRows(copyData))
+		if err != nil {
+			return fmt.Errorf("error al insertar diagnósticos en lote %d-%d: %w", i, end, err)
+		}
 	}
 
-	// Ejecutar inserción en lotes con CopyFrom
-	_, err = tx.CopyFrom(ctx, pgx.Identifier{"diagnoses"}, columns, pgx.CopyFromRows(copyData))
-	if err != nil {
-		return fmt.Errorf("error al insertar diagnósticos: %w", err)
-	}
-
-	// Confirmar la transacción
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("error al confirmar transacción: %w", err)
 	}
 
-	fmt.Println("[OK] Diagnósticos insertados correctamente.")
+	fmt.Println("[OK] Diagnósticos insertados correctamente por lotes.")
 	return nil
 }
+

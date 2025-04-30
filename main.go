@@ -9,8 +9,8 @@ import (
 
 func main() {
 	// Rutas absolutas (ajusta según tu carpeta real)
-	filePathMedicines := "/home/billy/Desktop/ProyectosUaemex/CSV2Sql/lista_medicamentos.csv"
-	filePathDiagnoses := "/home/billy/Desktop/ProyectosUaemex/CSV2Sql/diagnosticos_cie_1.csv"
+	filePathMedicines := "./lista_medicamentos.csv"
+	filePathDiagnoses := "./diagnosticos_cie_1.csv"
 
 	// 1. Conectar a la base de datos
 	db, err := migrator.ConnectDB()
